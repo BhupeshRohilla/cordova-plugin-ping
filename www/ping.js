@@ -3,25 +3,44 @@ var utils = require('cordova/utils'),
 	exec = require('cordova/exec'),
 	cordova = require('cordova');
 
-function Ping (ipList) {
-	this.results = null;
+class Ping {
+	constructor(){
+		this.results = null;
+	}
+	init(options) {
+		return new Promise((resolve, reject) =>{
+			exec((res) => {
+                resolve(res);
+            }, (ex) => {
+				reject(ex);
+            }, 'Ping', 'createInstance', options);
+		})
+	}
+    start() {
+        return new Promise((resolve, reject) => {
+            exec((result) => {
+                let resp;
+                try {
+					resp = JSON.parse(result);
+                }
+                catch (ex) {
+					resp = result;
+                }
+                resolve(resp);
+            }, (ex) => {
+				reject(ex);
+            }, 'Ping', 'start', []);
+        });
+    }
+    stop() {
+        return new Promise((resolve, reject) => {
+            exec((res) => {
+                resolve(res);
+            }, (ex) => {
+                reject(ex);
+            }, 'Ping', 'stop', []);
+        });
+    }
 }
-
-Ping.prototype.ping = function (ipList, success, err) {
-	var successCallback, errorCallback, self;
-	self = this;
-	successCallback = function (r) {
-		self.results = r;
-		if (success && typeof success === 'function') {
-			success(r);
-		}
-	};
-	errorCallback = function (e) {
-		if (err && typeof err === 'function') {
-			err(e);
-		}
-	};
-	exec(successCallback, errorCallback, "Ping", "getPingInfo", ipList);
-};
 
 module.exports = Ping;

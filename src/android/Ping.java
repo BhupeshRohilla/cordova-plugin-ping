@@ -1,3 +1,9 @@
+/* NOTE:
+*  Will work only with 1 instance.
+*  Saving only 1 instance. If multiple instances at the same time is required then save them all
+*  in a dictionary with key as instance ID and value as that instance and send back the instance ID
+* in createInstance action which can be used to get the instance from the same dictionary to start or stop the ping.
+*/
 
 package org.tiste.cordova.ping;
 
@@ -26,6 +32,9 @@ import android.util.Log;
 
 public class Ping extends CordovaPlugin {
 		public static final String TAG = "Ping";
+		private JSONArray instanceArgs = new JSONArray();
+		private Ping pingInstance;
+		private Process mIpAddrProcess = null;
 
 		@Override
 		public void initialize(CordovaInterface cordova, CordovaWebView webView) {
@@ -34,86 +43,94 @@ public class Ping extends CordovaPlugin {
 
 		@Override
 		public boolean execute(String action, final JSONArray args, final CallbackContext callbackContext) throws JSONException {
-				if ("getPingInfo".equals(action)) {
-
-						cordova.getThreadPool().execute(new Runnable() {
-								public void run() {
-										ping(args, callbackContext);
-								}
-						});
-
-						return true;
+			if("createInstance".equals(action)){
+				if(args != null && args.length() > 0) {
+					instanceArgs = args;
+					pingInstance = new Ping();
+                	callbackContext.success("Ping instance created.");
+				}else{
+					callbackContext.error("Error in arguments provided.");
 				}
-				return false;
+				return true;
+			}else if ("start".equals(action)) {
+				cordova.getThreadPool().execute(new Runnable() {
+					public void run() {
+						pingInstance.ping(instanceArgs, callbackContext);
+					}
+				});
+				return true;
+			}else if("stop".equals(action)){
+				pingInstance.killPing(callbackContext);
+				return true;
+			}
+			return false;
 		}
 
 		private void ping(JSONArray args, CallbackContext callbackContext) {
-				try {
-
-						if (args != null && args.length() > 0) {
-								JSONArray resultList = new JSONArray();
-								int length = args.length();
-								for (int index = 0; index < length; index++) {
-										String query = "";
-										String timeout = "";
-										String count = "";
-										String version = "";
-										JSONObject request = new JSONObject();
-										JSONObject responseJson = new JSONObject();
-										try{
-												JSONObject obj = args.optJSONObject(index);  
-												query = obj.optString("query");
-												timeout = obj.optString("timeout");
-												count = obj.optString("retry");
-												version = obj.optString("version");
-												request.put("query",query);
-												request.put("timeout",timeout);
-												request.put("retry",count);
-												request.put("version",version);
-												JSONObject result = doPing(query,timeout,count,version);
-												Map<String,String> out = new HashMap<String, String>();
-												out= parse(result,out);
-												JSONObject r = new JSONObject();
-												JSONObject finalResponse = new JSONObject();
-												r.put("target", query);
-												if (Double.parseDouble(out.get("avgRtt")) > 0) {
-														responseJson.put("status", "success");
-														r.put("avgRtt", out.get("avgRtt"));
-														r.put("maxRtt", out.get("maxRtt"));
-														r.put("minRtt", out.get("minRtt"));
-														r.put("pctTransmitted",out.get("pctTransmitted"));
-														r.put("pctReceived",out.get("pctReceived"));
-														r.put("pctLoss",out.get("pctLoss"));
-														responseJson.put("result", r);
-														finalResponse.put("response",responseJson);
-														finalResponse.put("request",request);
-														resultList.put(finalResponse);
-												} else {
-														responseJson.put("status", "timeout");
-														r.put("avgRtt", 0);
-														r.put("maxRtt", 0);
-														r.put("minRtt", 0);
-														r.put("pctTransmitted",out.get("pctTransmitted"));
-														r.put("pctReceived",out.get("pctReceived"));
-														r.put("pctLoss","100%");
-														responseJson.put("result", r);
-														finalResponse.put("response",responseJson);
-														finalResponse.put("request",request);
-														resultList.put(finalResponse);
-												}
-										}catch (Exception e){
-												e.printStackTrace();
-										}
-								}
-
-								callbackContext.success(resultList);
-
-						} else {
-								callbackContext.error("Error");
+			try {
+				// if (args != null && args.length() > 0) {
+					JSONArray resultList = new JSONArray();
+					int length = args.length();
+					for (int index = 0; index < length; index++) {
+						String query = "";
+						String timeout = "";
+						String count = "";
+						String version = "";
+						JSONObject request = new JSONObject();
+						JSONObject responseJson = new JSONObject();
+						try{
+							JSONObject obj = args.optJSONObject(index);
+							query = obj.optString("query");
+							timeout = obj.optString("timeout");
+							count = obj.optString("retry");
+							version = obj.optString("version");
+							request.put("query",query);
+							request.put("timeout",timeout);
+							request.put("retry",count);
+							request.put("version",version);
+							JSONObject result = doPing(query,timeout,count,version);
+							Map<String,String> out = new HashMap<String, String>();
+							out= parse(result,out);
+							JSONObject r = new JSONObject();
+							JSONObject finalResponse = new JSONObject();
+							r.put("target", query);
+							if (Double.parseDouble(out.get("avgRtt")) > 0) {
+								responseJson.put("status", "success");
+								r.put("avgRtt", out.get("avgRtt"));
+								r.put("maxRtt", out.get("maxRtt"));
+								r.put("minRtt", out.get("minRtt"));
+								r.put("pctTransmitted",out.get("pctTransmitted"));
+								r.put("pctReceived",out.get("pctReceived"));
+								r.put("pctLoss",out.get("pctLoss"));
+								responseJson.put("result", r);
+								finalResponse.put("response",responseJson);
+								finalResponse.put("request",request);
+								resultList.put(finalResponse);
+							} else {
+								responseJson.put("status", "timeout");
+								r.put("avgRtt", 0);
+								r.put("maxRtt", 0);
+								r.put("minRtt", 0);
+								r.put("pctTransmitted",out.get("pctTransmitted"));
+								r.put("pctReceived",out.get("pctReceived"));
+								r.put("pctLoss","100%");
+								responseJson.put("result", r);
+								finalResponse.put("response",responseJson);
+								finalResponse.put("request",request);
+								resultList.put(finalResponse);
+							}
+						}catch (Exception e){
+								e.printStackTrace();
 						}
-				} catch (Exception e) {
-						System.out.println(e.getMessage());
-				}
+					}
+					callbackContext.success(resultList);
+				// } else {
+				// 	callbackContext.error("Error");
+				// }
+			} catch (Exception e) {
+				System.out.println(e.getMessage());
+				callbackContext.error(e.getMessage());
+			}
 		}
 
 
@@ -161,7 +178,7 @@ public class Ping extends CordovaPlugin {
 								command=    command+ " -c "+retry+ " ";
 						}
 						System.out.println(">>"+command+ip);
-						Process mIpAddrProcess = runtime.exec(command + ip);
+						mIpAddrProcess = runtime.exec(command + ip);
 						int mExitValue = mIpAddrProcess.waitFor();
 						System.out.println("mExitValue"+mExitValue);
 						if (mExitValue == 0) {
@@ -171,7 +188,7 @@ public class Ping extends CordovaPlugin {
 										System.out.println("Input Line:    "+inputLine);
 										if (inputLine.length() > 0 && inputLine.contains("transmitted")) {
 												transmitted = inputLine;
-										}    
+										}
 										if (inputLine.length() > 0 && inputLine.contains("avg")) {
 												stringLine = inputLine;
 										}
@@ -190,7 +207,7 @@ public class Ping extends CordovaPlugin {
 										r.put("pctTransmitted",s[0].trim().split(" ")[0]);
 										r.put("pctReceived",s[1].trim().split(" ")[0]);
 										r.put("pctLoss",s[2].trim().split(" ")[0]);
-								}else{  
+								}else{
 										r.put("avgRtt",0);
 								}
 						} else {
@@ -210,5 +227,20 @@ public class Ping extends CordovaPlugin {
 						System.out.println(" Exception:" + e);
 				}
 				return r;
+		}
+
+		private void killPing(CallbackContext callbackContext){
+			try{
+				if(mIpAddrProcess != null){
+					mIpAddrProcess.destroy();
+					callbackContext.success("Ping aborted!");
+					mIpAddrProcess = null;
+				}else{
+					callbackContext.error("Ping not started.");
+				}
+			} catch (Exception e){
+				System.out.println("Exception on killing ping process:" + e);
+				callbackContext.error(e.getMessage());
+			}
 		}
 }
